@@ -57,6 +57,22 @@ export async function addConversation(db: D1Database, userId: string, role: 'use
     .bind(userId, role, content).run();
 }
 
+// 一次查询：最新摘要 + 近期对话（减少往返）
+export async function getContextData(db: D1Database, userId: string, limit = 20): Promise<{
+  summary: Summary | null;
+  recent: Conversation[];
+}> {
+  const [summaryResult, recentResult] = await db.batch([
+    db.prepare('SELECT * FROM summaries WHERE user_id = ? ORDER BY created_at DESC LIMIT 1').bind(userId),
+    db.prepare(
+      'SELECT * FROM conversations WHERE user_id = ? AND is_summary = 0 ORDER BY created_at DESC LIMIT ?'
+    ).bind(userId, limit),
+  ]);
+  const summary = (summaryResult.results[0] as Summary) || null;
+  const recent = (recentResult.results as Conversation[]).reverse();
+  return { summary, recent };
+}
+
 export async function getRecentConversations(db: D1Database, userId: string, limit = 20): Promise<Conversation[]> {
   return db.prepare(
     'SELECT * FROM conversations WHERE user_id = ? AND is_summary = 0 ORDER BY created_at DESC LIMIT ?'

@@ -10,3 +10,7 @@ database_id = "17d88c9d-8da7-4831-ac7f-656a8ddfa515"
 [[kv_namespaces]]
 binding = "KV"
 id = "3478c0ea9fe34e86bfb6070cf7c59411"
+
+# 保持 Worker 活跃，减少冷启动延迟
+[triggers]
+crons = ["*/1 * * * *"]

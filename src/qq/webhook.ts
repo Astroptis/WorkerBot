@@ -91,8 +91,9 @@ export async function handleWebhook(env: Env, request: Request): Promise<Respons
   // 处理签名校验（普通事件）
   const event: QQWebhookEvent = payload;
 
-  // 只处理消息事件
-  if (event.type !== 'C2C_MESSAGE_CREATE' && event.type !== 'GROUP_AT_MESSAGE_CREATE') {
+  // 只处理消息事件（QQ 用 t 字段表示事件类型）
+  const eventType = event.t || event.type;
+  if (eventType !== 'C2C_MESSAGE_CREATE' && eventType !== 'GROUP_AT_MESSAGE_CREATE') {
     return new Response('OK');
   }
 
@@ -101,23 +102,23 @@ export async function handleWebhook(env: Env, request: Request): Promise<Respons
     return new Response('OK');
   }
 
-  // 确保用户存在
-  await getOrCreateUser(env.DB, userId);
-
-  // 限流检查
-  const { allowed } = await checkRateLimit(env.KV, userId);
-  if (!allowed) {
-    await sendReply(env, event, '请求过于频繁，请稍后再试。');
-    return new Response('OK');
-  }
-
-  // 提取消息文本
-  const text = extractMessageText(event);
-  if (!text) {
-    return new Response('OK');
-  }
-
   try {
+    // 确保用户存在
+    await getOrCreateUser(env.DB, userId);
+
+    // 限流检查
+    const { allowed } = await checkRateLimit(env.KV, userId);
+    if (!allowed) {
+      await sendReply(env, event, '请求过于频繁，请稍后再试。');
+      return new Response('OK');
+    }
+
+    // 提取消息文本
+    const text = extractMessageText(event);
+    if (!text) {
+      return new Response('OK');
+    }
+
     let reply: string;
 
     if (isCommand(text)) {
@@ -129,7 +130,11 @@ export async function handleWebhook(env: Env, request: Request): Promise<Respons
     await sendReply(env, event, reply);
   } catch (error) {
     console.error('Error processing message:', error);
-    await sendReply(env, event, '处理消息时出错，请稍后再试。');
+    try {
+      await sendReply(env, event, '处理消息时出错，请稍后再试。');
+    } catch (e2) {
+      console.error('Error sending error reply:', e2);
+    }
   }
 
   return new Response('OK');

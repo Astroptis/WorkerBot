@@ -1,12 +1,17 @@
 import { Env } from '../types';
-import { getQQAccessToken, setQQAccessToken, getQQCredentials } from '../db/kv';
-import { QQTokenResponse } from './types';
+import { getQQCredentials } from '../db/kv';
 
-const QQ_TOKEN_URL = 'https://bots.qq.com/app/getAppAccessToken';
+const QQ_TOKEN_URL = 'https://api.bot.qq.com/app/getAppAccessToken';
+
+// 内存缓存 access token，减少重复请求
+let cachedToken: string | null = null;
+let cachedTokenExpiry = 0;
 
 export async function getAccessToken(env: Env): Promise<string> {
-  const cached = await getQQAccessToken(env.KV);
-  if (cached) return cached;
+  // 内存缓存命中
+  if (cachedToken && Date.now() < cachedTokenExpiry) {
+    return cachedToken;
+  }
 
   const credentials = await getQQCredentials(env.KV);
   if (!credentials) {
@@ -17,16 +22,31 @@ export async function getAccessToken(env: Env): Promise<string> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      appId: credentials.appId,
+      appId: String(credentials.appId),
       clientSecret: credentials.appSecret,
     }),
   });
 
-  const data = await response.json() as QQTokenResponse;
-  if (data.code !== 0) {
-    throw new Error(`Failed to get QQ access token: ${data.message}`);
+  const responseText = await response.text();
+  let data: any;
+  try {
+    data = JSON.parse(responseText);
+  } catch {
+    throw new Error(`QQ token API returned non-JSON: ${responseText.slice(0, 200)}`);
   }
 
-  await setQQAccessToken(env.KV, data.data.access_token, data.data.expires_in);
-  return data.data.access_token;
+  // 成功响应格式：{ access_token, expires_in }；失败响应格式：{ code, message }
+  if (data.code !== undefined && data.code !== 0) {
+    throw new Error(`Failed to get QQ access token: code=${data.code} msg=${data.message}`);
+  }
+
+  if (!data.access_token) {
+    throw new Error(`QQ token API missing access_token: ${JSON.stringify(data)}`);
+  }
+
+  // 缓存到内存（提前 60 秒过期刷新）
+  cachedToken = data.access_token;
+  cachedTokenExpiry = Date.now() + (data.expires_in - 60) * 1000;
+
+  return data.access_token;
 }

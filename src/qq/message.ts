@@ -2,27 +2,27 @@ import { Env } from '../types';
 import { QQWebhookEvent } from './types';
 import { getAccessToken } from './token';
 
-const QQ_API_BASE = 'https://api.sgroup.qq.com';
+const QQ_API_BASE = 'https://api.bot.qq.com';
 
 // 从 Webhook 事件中提取消息文本
 export function extractMessageText(event: QQWebhookEvent): string {
-  const content = event.raw.content || '';
+  const content = event.d?.content || '';
   return content.replace(/@\S+\s*/g, '').trim();
 }
 
 // 获取发送者信息
 export function getSenderId(event: QQWebhookEvent): string {
-  return event.raw.author.member_openid || event.raw.author.user_openid || '';
+  return event.d?.author?.user_openid || event.d?.author?.member_openid || '';
 }
 
 // 获取群 ID（如果有）
 export function getGroupId(event: QQWebhookEvent): string | undefined {
-  return event.raw.group_openid;
+  return event.d?.group_openid;
 }
 
 // 判断是否为群消息
 export function isGroupMessage(event: QQWebhookEvent): boolean {
-  return !!event.raw.group_openid;
+  return !!event.d?.group_openid;
 }
 
 // 发送私聊消息
@@ -94,8 +94,8 @@ export async function sendReply(
   content: string
 ): Promise<void> {
   if (isGroupMessage(event)) {
-    await sendGroupMessage(env, getGroupId(event)!, content, event.id);
+    await sendGroupMessage(env, getGroupId(event)!, content);
   } else {
-    await sendPrivateMessage(env, getSenderId(event), content, event.id);
+    await sendPrivateMessage(env, getSenderId(event), content);
   }
 }

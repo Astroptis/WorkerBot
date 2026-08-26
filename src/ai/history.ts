@@ -1,9 +1,8 @@
 import { Env } from '../types';
 import { ChatMessage } from './types';
 import {
-  getRecentConversations,
-  getLatestSummary,
   addConversation,
+  getContextData,
   getUncompressedCount,
   addSummary,
   markAsCompressed,
@@ -14,18 +13,15 @@ const CACHE_WINDOW = 20;
 const COMPRESS_THRESHOLD = 40;
 const COMPRESS_BATCH = 20;
 
-// 构建对话上下文
+// 构建对话上下文（合并查询）
 export async function buildContext(env: Env, userId: string): Promise<ChatMessage[]> {
   const messages: ChatMessage[] = [];
 
-  // 加载最新摘要
-  const summary = await getLatestSummary(env.DB, userId);
+  // 一次查询获取摘要 + 近期对话
+  const { summary, recent } = await getContextData(env.DB, userId, CACHE_WINDOW);
   if (summary) {
     messages.push({ role: 'system', content: `历史对话摘要：${summary.summary}` });
   }
-
-  // 加载近期对话
-  const recent = await getRecentConversations(env.DB, userId, CACHE_WINDOW);
   for (const conv of recent) {
     messages.push({ role: conv.role, content: conv.content });
   }

@@ -1,15 +1,24 @@
 // QQ Webhook 事件类型
 export interface QQWebhookEvent {
+  op: number;
+  t: string;
+  type?: string;
   id: string;
-  type: string;
-  timestamp: number;
-  raw: {
-    author: { member_openid: string; user_openid?: string };
-    content: string;
-    group_openid?: string;
+  d: {
     id: string;
+    content: string;
     timestamp: string;
+    author: {
+      id: string;
+      username?: string;
+      user_openid?: string;
+      member_openid?: string;
+    };
+    message_type?: number;
+    msg_id?: string;
+    group_openid?: string;
   };
+  raw?: any;
 }
 
 // 消息内容

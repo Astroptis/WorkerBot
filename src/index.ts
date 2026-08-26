@@ -9,8 +9,6 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
-
-    // CORS 预检
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         headers: {
@@ -58,6 +56,11 @@ export default {
       console.error('Error:', error);
       return new Response('Internal Server Error', { status: 500 });
     }
+  },
+
+  // 定时任务：保持 Worker 活跃
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    // 预热，减少冷启动延迟
   },
 };
 
