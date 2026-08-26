@@ -37,14 +37,8 @@ export async function verifyToken(secret: string, token: string): Promise<boolea
 export async function handleLogin(env: Env, body: { password: string }): Promise<Response> {
   const stored = await getAdminPassword(env.KV);
 
-  // 首次登录，设置密码
+  // 首次登录，设置密码（任意密码均可）
   if (!stored) {
-    if (!env.ADMIN_INIT_PASSWORD) {
-      return jsonResponse({ error: '未配置初始密码' }, 400);
-    }
-    if (body.password !== env.ADMIN_INIT_PASSWORD) {
-      return jsonResponse({ error: '密码错误' }, 401);
-    }
     const hash = await hashPassword(body.password);
     await setAdminPassword(env.KV, hash);
     const token = await createToken(body.password, { role: 'admin' });
@@ -65,7 +59,10 @@ export async function handleLogin(env: Env, body: { password: string }): Promise
 export async function verifyAuth(env: Env, request: Request): Promise<boolean> {
   const auth = request.headers.get('Authorization');
   if (!auth?.startsWith('Bearer ')) return false;
-  return verifyToken(env.ADMIN_INIT_PASSWORD || '', auth.slice(7));
+  const stored = await getAdminPassword(env.KV);
+  if (!stored) return false;
+  // 用存储的密码哈希作为 JWT 密钥的替代方案
+  return verifyToken(stored, auth.slice(7));
 }
 
 function jsonResponse(data: Record<string, unknown>, status = 200): Response {

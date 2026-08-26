@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "db:init": "wrangler d1 execute qq-bot-db --file=./src/db/schema.sql"
+    "setup": "node -e \"require('child_process').execSync('pwsh -File scripts/setup.ps1',{stdio:'inherit'})\"",
+    "deploy": "npm run setup && wrangler deploy",
+    "db:init": "wrangler d1 execute qq-bot-db --file=./src/db/schema.sql --remote"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.0.0",

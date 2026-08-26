@@ -10,8 +10,3 @@ database_id = "YOUR_D1_DATABASE_ID"
 [[kv_namespaces]]
 binding = "KV"
 id = "YOUR_KV_NAMESPACE_ID"
-
-[vars]
-QQ_APP_ID = ""
-QQ_APP_SECRET = ""
-ADMIN_INIT_PASSWORD = ""

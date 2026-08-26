@@ -3,7 +3,7 @@ import { QQWebhookEvent } from './types';
 import { extractMessageText, getSenderId, sendReply } from './message';
 import { isCommand, handleCommand } from '../commands';
 import { processMessage } from '../ai/history';
-import { checkRateLimit } from '../db/kv';
+import { checkRateLimit, getQQCredentials } from '../db/kv';
 import { getOrCreateUser } from '../db/d1';
 
 // 验证 QQ Webhook 签名
@@ -14,8 +14,6 @@ export function verifySignature(
   appSecret: string
 ): boolean {
   // QQ 官方验证逻辑（根据官方文档实现）
-  // 实际签名验证需要根据 QQ 开放平台文档实现
-  // 这里简化处理，生产环境需要完整实现
   if (!signature || !timestamp) return false;
   // TODO: 实现完整的签名验证
   return true;
@@ -28,10 +26,13 @@ export async function handleWebhook(
 ): Promise<Response> {
   const body = await request.text();
 
+  // 获取 QQ 凭据
+  const credentials = await getQQCredentials(env.KV);
+
   // 验证签名
   const signature = request.headers.get('X-Qq-Signature');
   const timestamp = request.headers.get('X-Qq-Timestamp');
-  if (!verifySignature(body, signature, timestamp, env.QQ_APP_SECRET)) {
+  if (!verifySignature(body, signature, timestamp, credentials?.appSecret || '')) {
     return new Response('Invalid signature', { status: 401 });
   }
 

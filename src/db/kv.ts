@@ -7,6 +7,35 @@ export async function setAdminPassword(kv: KVNamespace, password: string): Promi
   await kv.put('admin:password', password);
 }
 
+// QQ 凭据
+export interface QQCredentials {
+  appId: string;
+  appSecret: string;
+}
+
+export async function getQQCredentials(kv: KVNamespace): Promise<QQCredentials | null> {
+  return kv.get('config:qq_credentials', 'json');
+}
+
+export async function setQQCredentials(kv: KVNamespace, credentials: QQCredentials): Promise<void> {
+  await kv.put('config:qq_credentials', JSON.stringify(credentials));
+}
+
+// 系统设置
+export interface SystemSettings {
+  adminPassword: string;
+  qqCredentials: QQCredentials | null;
+  defaultModel: string;
+}
+
+export async function getSystemSettings(kv: KVNamespace): Promise<SystemSettings> {
+  return {
+    adminPassword: (await kv.get('admin:password')) || '',
+    qqCredentials: await getQQCredentials(kv),
+    defaultModel: await getDefaultModel(kv),
+  };
+}
+
 // API Key 管理
 export interface ApiKeyConfig {
   id: string;

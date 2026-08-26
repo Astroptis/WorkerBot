@@ -3,6 +3,7 @@ import { handleWebhook } from './qq/webhook';
 import { handleLogin, verifyAuth } from './admin/auth';
 import { handleGetKeys, handleCreateKey, handleUpdateKey, handleDeleteKey } from './admin/keys';
 import { handleGetUsers, handleGetUser, handleGetUserConversations } from './admin/users';
+import { handleGetSettings, handleUpdateSettings } from './admin/settings';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -101,6 +102,15 @@ async function handleAdminApi(env: Env, request: Request, url: URL): Promise<Res
     return handleGetUserConversations(env, userId, url);
   }
 
+  // 系统设置
+  if (path === '/api/admin/settings') {
+    if (method === 'GET') return handleGetSettings(env);
+    if (method === 'POST') {
+      const body = await request.json() as any;
+      return handleUpdateSettings(env, body);
+    }
+  }
+
   return new Response('Not Found', { status: 404 });
 }
 
@@ -132,6 +142,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
           <li><a href="#" data-tab="keys">API Key 管理</a></li>
           <li><a href="#" data-tab="users">用户管理</a></li>
           <li><a href="#" data-tab="conversations">对话记录</a></li>
+          <li><a href="#" data-tab="settings">系统设置</a></li>
         </ul>
         <button id="logout-btn">退出</button>
       </nav>
@@ -149,6 +160,29 @@ const HTML_CONTENT = `<!DOCTYPE html>
           <h3>对话记录</h3>
           <select id="user-select"><option value="">选择用户</option></select>
           <div id="conversations-list"></div>
+        </div>
+        <div id="tab-settings" class="tab">
+          <h3>系统设置</h3>
+          <form id="settings-form">
+            <div class="form-group">
+              <label>QQ App ID</label>
+              <input type="text" id="qq-app-id" placeholder="QQ 开放平台 AppID">
+            </div>
+            <div class="form-group">
+              <label>QQ App Secret</label>
+              <input type="password" id="qq-app-secret" placeholder="QQ 开放平台 AppSecret">
+            </div>
+            <div class="form-group">
+              <label>默认模型</label>
+              <input type="text" id="default-model" placeholder="gpt-3.5-turbo">
+            </div>
+            <div class="form-group">
+              <label>修改管理员密码（留空不修改）</label>
+              <input type="password" id="new-password" placeholder="新密码">
+            </div>
+            <button type="submit">保存设置</button>
+          </form>
+          <p id="settings-msg" class="msg"></p>
         </div>
       </main>
     </div>
@@ -199,12 +233,17 @@ button{padding:8px 16px;background:#07c160;color:white;border:none;border-radius
 #logout-btn{margin-top:20px;background:#666}
 .conversation-messages .message{padding:10px;margin:5px 0;border-radius:4px}
 .conversation-messages .message.user{background:#e3f2fd}
-.conversation-messages .message.assistant{background:#f3e5f5}`;
+.conversation-messages .message.assistant{background:#f3e5f5}
+.form-group{margin-bottom:15px}
+.form-group label{display:block;margin-bottom:5px;font-weight:bold}
+.msg{margin-top:10px;padding:10px;border-radius:4px;display:none}
+.msg.success{display:block;background:#e8f5e9;color:#2e7d32}
+.msg.error{display:block;background:#ffebee;color:#c62828}`;
 
 const JS_CONTENT = `const API_BASE='/api/admin';let token=localStorage.getItem('admin_token');
 document.getElementById('login-form').addEventListener('submit',async e=>{e.preventDefault();const p=document.getElementById('password').value;try{const r=await fetch(API_BASE+'/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:p})});const d=await r.json();if(d.token){token=d.token;localStorage.setItem('admin_token',token);showAdminPage()}else{document.getElementById('login-error').textContent=d.error||'登录失败'}}catch(e){document.getElementById('login-error').textContent='网络错误'}});
 function showAdminPage(){document.getElementById('login-page').classList.remove('active');document.getElementById('admin-page').classList.add('active');loadKeys()}
-document.querySelectorAll('[data-tab]').forEach(t=>{t.addEventListener('click',e=>{e.preventDefault();document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('[data-tab]').forEach(x=>x.classList.remove('active'));document.getElementById('tab-'+t.dataset.tab).classList.add('active');t.classList.add('active');if(t.dataset.tab==='users')loadUsers();if(t.dataset.tab==='conversations')loadUserSelect()})});
+document.querySelectorAll('[data-tab]').forEach(t=>{t.addEventListener('click',e=>{e.preventDefault();document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('[data-tab]').forEach(x=>x.classList.remove('active'));document.getElementById('tab-'+t.dataset.tab).classList.add('active');t.classList.add('active');if(t.dataset.tab==='users')loadUsers();if(t.dataset.tab==='conversations')loadUserSelect();if(t.dataset.tab==='settings')loadSettings()})});
 async function api(p,o={}){const r=await fetch(API_BASE+p,{...o,headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,...o.headers}});return r.json()}
 async function loadKeys(){const d=await api('/keys');const c=document.getElementById('keys-list');if(!d.keys?.length){c.innerHTML='<p>暂无 API Key</p>';return}c.innerHTML='<table><thead><tr><th>名称</th><th>Endpoint</th><th>模型</th><th>状态</th><th>操作</th></tr></thead><tbody>'+d.keys.map(k=>'<tr><td>'+k.name+'</td><td>'+k.endpoint+'</td><td>'+k.model+'</td><td>'+(k.enabled?'启用':'禁用')+'</td><td><button onclick="deleteKey(\\''+k.id+'\\')">删除</button></td></tr>').join('')+'</tbody></table>'}
 document.getElementById('add-key-btn').addEventListener('click',()=>{document.getElementById('key-modal').classList.add('active')});
@@ -217,4 +256,6 @@ window.viewConversations=uid=>{document.querySelectorAll('.tab').forEach(t=>t.cl
 document.getElementById('user-select').addEventListener('change',e=>{if(e.target.value)loadConversations(e.target.value)});
 async function loadConversations(uid){const d=await api('/users/'+uid+'/conversations');const c=document.getElementById('conversations-list');if(!d.conversations?.length){c.innerHTML='<p>暂无对话记录</p>';return}c.innerHTML='<div class="conversation-messages">'+d.conversations.map(c=>'<div class="message '+c.role+'"><strong>'+(c.role==='user'?'用户':'AI')+':</strong> '+c.content+'</div>').join('')+'</div>'}
 document.getElementById('logout-btn').addEventListener('click',()=>{token=null;localStorage.removeItem('admin_token');document.getElementById('admin-page').classList.remove('active');document.getElementById('login-page').classList.add('active')});
+async function loadSettings(){const d=await api('/settings');document.getElementById('qq-app-id').value=d.qqAppId||'';document.getElementById('default-model').value=d.defaultModel||'gpt-3.5-turbo'}
+document.getElementById('settings-form').addEventListener('submit',async e=>{e.preventDefault();const msg=document.getElementById('settings-msg');const body={};body.qqAppId=document.getElementById('qq-app-id').value;body.qqAppSecret=document.getElementById('qq-app-secret').value||undefined;body.defaultModel=document.getElementById('default-model').value;const pw=document.getElementById('new-password').value;if(pw)body.newPassword=pw;try{const r=await api('/settings',{method:'POST',body:JSON.stringify(body)});if(r.success){msg.textContent='设置已保存';msg.className='msg success';document.getElementById('new-password').value='';document.getElementById('qq-app-secret').value=''}else{msg.textContent=r.error||'保存失败';msg.className='msg error'}}catch(e){msg.textContent='网络错误';msg.className='msg error'}});
 if(token)showAdminPage()`;
