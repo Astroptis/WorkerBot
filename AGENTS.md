@@ -32,8 +32,12 @@
 - **给 AI 调用加超时 + 重试**：`api.b.ai` 对 Cloudflare Worker 偶发不响应，`fetchWithTimeout(15000)` + 二次重试提高可靠性
 - **AppSecret 重置后需等待几分钟**：QQ 平台 secret 缓存有延迟，重置后立即保存 webhook 会报签名错误，等 5 分钟再试
 - **AppSecret 一致性**：用户多次重置，每次重置后必须同步更新 KV `config:qq_credentials`，否则签名验证失败
-- **deepseek-v4-flash 不支持 function calling**：该模型不返回 `tool_calls`（会假装调用但实际是普通文本）。实现"AI 调用工具"要用**启发式意图检测 + 结果注入**方案，不能用 OpenAI function calling
+- **deepseek-v4-flash 不支持稳定 function calling**：b.ai 上它有时返回 tool_calls、有时只输出文字"我去查一下"（不稳定）。b.ai 的 mimo-v2.5 用非标准文本式 `<tool_call>` 标记也不稳定。**OpenCode Zen mimo-v2.5-free 支持标准 tool_calls 但免费限流极严（连续第1次就 429）**，不可用
+- **实现"AI 主动搜索"用两阶段标记方案**：第一次调用让 AI 只输出 `SEARCH`/`NO`（max_tokens=100，推理模型 max_tokens 太小会被截断在 reasoning 阶段导致 content 为空），若 SEARCH 则执行搜索并把结果注入 system prompt 再第二次调用生成回复
+- **决策判断检查 `content`**：deepseek 推理模型把思考放 `reasoning_content`，`content` 可能为空，需 `json()` 解析后读 `choices[0].message.content`
 - **AI 请求超时**：用 `Promise.race` 自定义超时（AbortController 在 CF Workers 有兼容问题）
+- **CF→api.b.ai 网络偶发挂起**：Worker 到 b.ai 的 fetch 偶发无响应（非代码问题），用超时+重试兜底
+- **b.ai 模型列表**：`deepseek-v4-flash`(免费,可用)、`mimo-v2.5`、`mimo-v2.5-pro`、`deepseek-v4-pro`(付费,access_denied)、`gpt-5.2`等付费模型需充值
 
 ## 部署与仓库
 - 部署：`wrangler deploy`（项目目录 `C:\Users\wang\qq-bot-worker`）
