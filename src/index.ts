@@ -6,7 +6,7 @@ import { handleGetUsers, handleGetUser, handleGetUserConversations } from './adm
 import { handleGetSettings, handleUpdateSettings } from './admin/settings';
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
     if (request.method === 'OPTIONS') {
@@ -22,7 +22,7 @@ export default {
     try {
       // QQ Webhook (POST)
       if (path === '/api/webhook' && request.method === 'POST') {
-        return handleWebhook(env, request);
+        return handleWebhook(env, request, ctx);
       }
 
       // QQ 可能先发 GET 测试可达性

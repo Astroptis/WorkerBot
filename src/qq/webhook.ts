@@ -48,7 +48,7 @@ async function handleValidation(
 }
 
 // 处理 Webhook 事件
-export async function handleWebhook(env: Env, request: Request): Promise<Response> {
+export async function handleWebhook(env: Env, request: Request, ctx?: ExecutionContext): Promise<Response> {
   const body = await request.text();
   const credentials = await getQQCredentials(env.KV);
   const appSecret = credentials?.appSecret || '';
@@ -102,40 +102,49 @@ export async function handleWebhook(env: Env, request: Request): Promise<Respons
     return new Response('OK');
   }
 
-  try {
-    // 确保用户存在
-    await getOrCreateUser(env.DB, userId);
-
-    // 限流检查
-    const { allowed } = await checkRateLimit(env.KV, userId);
-    if (!allowed) {
-      await sendReply(env, event, '请求过于频繁，请稍后再试。');
-      return new Response('OK');
-    }
-
-    // 提取消息文本
-    const text = extractMessageText(event);
-    if (!text) {
-      return new Response('OK');
-    }
-
-    let reply: string;
-
-    if (isCommand(text)) {
-      reply = await handleCommand(env, userId, text);
-    } else {
-      reply = await processMessage(env, userId, text);
-    }
-
-    await sendReply(env, event, reply);
-  } catch (error) {
-    console.error('Error processing message:', error);
+  // 先返回 OK，异步处理消息（避免 Worker 超时终止导致 AI 请求中断）
+  const processAsync = async () => {
     try {
-      await sendReply(env, event, '处理消息时出错，请稍后再试。');
-    } catch (e2) {
-      console.error('Error sending error reply:', e2);
+      // 确保用户存在
+      await getOrCreateUser(env.DB, userId);
+
+      // 限流检查
+      const { allowed } = await checkRateLimit(env.KV, userId);
+      if (!allowed) {
+        await sendReply(env, event, '请求过于频繁，请稍后再试。');
+        return;
+      }
+
+      // 提取消息文本
+      const text = extractMessageText(event);
+      if (!text) {
+        return;
+      }
+
+      let reply: string;
+
+      if (isCommand(text)) {
+        reply = await handleCommand(env, userId, text);
+      } else {
+        reply = await processMessage(env, userId, text);
+      }
+
+      await sendReply(env, event, reply);
+    } catch (error) {
+      console.error('Error processing message:', error);
+      try {
+        await sendReply(env, event, '处理消息时出错，请稍后再试。');
+      } catch (e2) {
+        console.error('Error sending error reply:', e2);
+      }
     }
+  };
+
+  if (ctx && typeof ctx.waitUntil === 'function') {
+    ctx.waitUntil(processAsync());
+    return new Response('OK');
   }
 
+  await processAsync();
   return new Response('OK');
 }
