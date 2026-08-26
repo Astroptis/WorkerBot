@@ -102,7 +102,7 @@ export async function handleWebhook(env: Env, request: Request, ctx?: ExecutionC
     return new Response('OK');
   }
 
-  // 先返回 OK，异步处理消息（避免 Worker 超时终止导致 AI 请求中断）
+  // 处理消息（同步等待，但 chat.ts 内部有超时保护，确保不挂起）
   const processAsync = async () => {
     try {
       // 确保用户存在
@@ -139,11 +139,6 @@ export async function handleWebhook(env: Env, request: Request, ctx?: ExecutionC
       }
     }
   };
-
-  if (ctx && typeof ctx.waitUntil === 'function') {
-    ctx.waitUntil(processAsync());
-    return new Response('OK');
-  }
 
   await processAsync();
   return new Response('OK');

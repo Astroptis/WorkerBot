@@ -1,66 +1,64 @@
-import { AnySearchResponse, AnySearchResult } from './types';
+import { AnySearchResponse, AnySearchResult, ToolDefinition } from './types';
 
 const ANYSEARCH_API = 'https://api.anysearch.com/v1/search';
 
-// 需要实时/最新信息的搜索意图关键词
-const SEARCH_TRIGGER_PATTERN =
-  /天气|气温|新闻|最新|今天|明天|实时|股票|股价|价格|汇率|比赛|比分|热点|热搜|科技|发布|上市|多少(钱|元)|查询|搜索|查找|了解|介绍|是什么|怎么回事|发生了什么|政策|新规|油价|金价|房价|比特币|加密货币|明星|电影|电视剧|游戏|攻略|教程|怎么|如何/g;
-
-// 判断用户消息是否需要联网搜索
-export function needsSearch(text: string): boolean {
-  return SEARCH_TRIGGER_PATTERN.test(text);
-}
-
-// 从用户消息提取搜索关键词（去掉废话，保留核心）
-export function extractSearchQuery(text: string): string {
-  // 去掉常见提问语气词
-  const cleaned = text
-    .replace(/请|帮我|麻烦|一下|能不能|可以|吗|呢|啊|呀|吧/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return cleaned.slice(0, 100);
-}
+// 搜索工具定义（用于 function calling）
+export const SEARCH_TOOL: ToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'web_search',
+    description:
+      '搜索互联网获取最新信息。当用户询问实时信息（天气、新闻、最新动态、价格、股票、人物近况、事件等）时使用。返回搜索结果的标题、链接和摘要。',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: '要搜索的关键词或自然语言查询，例如"北京今天天气"或"某人物最新动态"',
+        },
+        max_results: {
+          type: 'integer',
+          description: '返回结果数量，1-10，默认 5',
+        },
+      },
+      required: ['query'],
+    },
+  },
+};
 
 // 调用 AnySearch 搜索
 export async function webSearch(
   query: string,
   maxResults = 5
 ): Promise<AnySearchResult[]> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 20000);
+  // 用 Promise.race 实现超时（避免 AbortController 在 CF Workers 的兼容问题）
+  const doFetch = fetch(ANYSEARCH_API, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Anysearch-Client': 'qq-bot/1.0.0',
+    },
+    body: JSON.stringify({
+      query,
+      max_results: Math.min(Math.max(maxResults, 1), 10),
+    }),
+  });
 
-  try {
-    const response = await fetch(ANYSEARCH_API, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Anysearch-Client': 'qq-bot/1.0.0',
-      },
-      body: JSON.stringify({
-        query,
-        max_results: Math.min(Math.max(maxResults, 1), 10),
-      }),
-      signal: controller.signal,
-    });
+  const response = await Promise.race([
+    doFetch,
+    new Promise<Response>((_, reject) => setTimeout(() => reject(new Error('搜索超时')), 15000)),
+  ]);
 
-    if (!response.ok) {
-      throw new Error(`AnySearch error: ${response.status}`);
-    }
-
-    const data = await response.json() as AnySearchResponse;
-    if (data.code !== 0) {
-      throw new Error(`AnySearch error: ${data.message}`);
-    }
-
-    return data.data.results || [];
-  } catch (error: any) {
-    if (error.name === 'AbortError') {
-      throw new Error('搜索超时');
-    }
-    throw error;
-  } finally {
-    clearTimeout(timer);
+  if (!response.ok) {
+    throw new Error(`AnySearch error: ${response.status}`);
   }
+
+  const data = await response.json() as AnySearchResponse;
+  if (data.code !== 0) {
+    throw new Error(`AnySearch error: ${data.message}`);
+  }
+
+  return data.data.results || [];
 }
 
 // 将搜索结果格式化为 AI 可读的文本
