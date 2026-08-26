@@ -10,6 +10,16 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
+    // 记录所有非静态资源请求
+    if (!path.startsWith('/style.css') && !path.startsWith('/app.js')) {
+      await env.KV.put('debug:last_request', JSON.stringify({
+        ts: new Date().toISOString(),
+        method: request.method,
+        path,
+        headers: Object.fromEntries(request.headers.entries()),
+      }), { expirationTtl: 3600 });
+    }
+
     // CORS 预检
     if (request.method === 'OPTIONS') {
       return new Response(null, {
@@ -22,9 +32,37 @@ export default {
     }
 
     try {
-      // QQ Webhook
+      // QQ Webhook (POST)
       if (path === '/api/webhook' && request.method === 'POST') {
         return handleWebhook(env, request);
+      }
+
+      // QQ 可能先发 GET 测试可达性
+      if (path === '/api/webhook') {
+        // 记录非 POST 请求
+        await env.KV.put('debug:last_other', JSON.stringify({
+          ts: new Date().toISOString(),
+          method: request.method,
+          headers: Object.fromEntries(request.headers.entries()),
+        }));
+        return new Response('OK', { headers: { 'Content-Type': 'text/plain' } });
+      }
+
+      // 健康检查
+      if (path === '/health') {
+        return new Response(JSON.stringify({ ok: true, ts: Date.now() }), { headers: { 'Content-Type': 'application/json' } });
+      }
+
+      // 调试 - 查看最近的任何请求
+      if (path === '/api/debug/last' && request.method === 'GET') {
+        const last = await env.KV.get('debug:last_request', 'json');
+        return new Response(JSON.stringify(last, null, 2), { headers: { 'Content-Type': 'application/json' } });
+      }
+
+      // 调试 - 查看最近 webhook 请求
+      if (path === '/api/debug/lastwh' && request.method === 'GET') {
+        const last = await env.KV.get('debug:last_webhook', 'json');
+        return new Response(JSON.stringify(last, null, 2), { headers: { 'Content-Type': 'application/json' } });
       }
 
       // 管理 API
