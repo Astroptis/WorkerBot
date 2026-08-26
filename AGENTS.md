@@ -8,6 +8,8 @@
 - AppSecret 存于 KV `config:qq_credentials`（会变动，通过管理面板设置，不要硬编码）
 - 管理面板密码：`tianlu4.5`（首次登录设置）
 - AI 后端：b.ai，endpoint `https://api.b.ai`，模型 `deepseek-v4-flash`（KV 中配置）
+- **联网搜索**：AnySearch REST API `https://api.anysearch.com/v1/search`（免费 1000次/天，无需 key，匿名可用）。请求 `POST {"query":"...","max_results":N}`，返回 `code:0` + `data.results[]`（title/url/snippet/content）
+- **搜索触发**：`needsSearch()` 启发式关键词检测（天气/新闻/最新/股价/汇率/搜索等），命中后自动调用 AnySearch 并把结果注入 AI system prompt 上下文
 
 ## 关键 API 要点
 - **QQ access_token 端点**：`https://api.bot.qq.com/app/getAppAccessToken`（不是 `bots.qq.com`，那是错的）
@@ -30,6 +32,8 @@
 - **给 AI 调用加超时 + 重试**：`api.b.ai` 对 Cloudflare Worker 偶发不响应，`fetchWithTimeout(15000)` + 二次重试提高可靠性
 - **AppSecret 重置后需等待几分钟**：QQ 平台 secret 缓存有延迟，重置后立即保存 webhook 会报签名错误，等 5 分钟再试
 - **AppSecret 一致性**：用户多次重置，每次重置后必须同步更新 KV `config:qq_credentials`，否则签名验证失败
+- **deepseek-v4-flash 不支持 function calling**：该模型不返回 `tool_calls`（会假装调用但实际是普通文本）。实现"AI 调用工具"要用**启发式意图检测 + 结果注入**方案，不能用 OpenAI function calling
+- **AI 请求超时**：用 `Promise.race` 自定义超时（AbortController 在 CF Workers 有兼容问题）
 
 ## 部署与仓库
 - 部署：`wrangler deploy`（项目目录 `C:\Users\wang\qq-bot-worker`）
