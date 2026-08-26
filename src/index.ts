@@ -124,6 +124,15 @@ async function handleAdminApi(env: Env, request: Request, url: URL): Promise<Res
     }
   }
 
+  // 清空所有聊天记录
+  if (path === '/api/admin/clear' && method === 'POST') {
+    const { clearAllConversations } = await import('./db/d1');
+    await clearAllConversations(env.DB);
+    return new Response(JSON.stringify({ success: true }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   return new Response('Not Found', { status: 404 });
 }
 
@@ -200,6 +209,12 @@ const HTML_CONTENT = `<!DOCTYPE html>
             <button type="submit">保存设置</button>
           </form>
           <p id="settings-msg" class="msg"></p>
+          <hr style="margin:20px 0">
+          <div class="form-group">
+            <label>清空所有聊天记录</label>
+            <p style="color:#999;font-size:12px;margin-bottom:8px">删除所有用户的对话历史和摘要（不会删除用户和配置）</p>
+            <button type="button" id="clear-chat-btn" style="background:#e53935">清空聊天记录</button>
+          </div>
         </div>
       </main>
     </div>
@@ -277,4 +292,5 @@ async function loadConversations(uid){const d=await api('/users/'+uid+'/conversa
 document.getElementById('logout-btn').addEventListener('click',()=>{token=null;localStorage.removeItem('admin_token');document.getElementById('admin-page').classList.remove('active');document.getElementById('login-page').classList.add('active')});
 async function loadSettings(){const d=await api('/settings');document.getElementById('qq-app-id').value=d.qqAppId||'';document.getElementById('default-model').value=d.defaultModel||'gpt-3.5-turbo';document.getElementById('system-prompt').value=d.systemPrompt||''}
 document.getElementById('settings-form').addEventListener('submit',async e=>{e.preventDefault();const msg=document.getElementById('settings-msg');const body={};body.qqAppId=document.getElementById('qq-app-id').value;body.qqAppSecret=document.getElementById('qq-app-secret').value||undefined;body.defaultModel=document.getElementById('default-model').value;body.systemPrompt=document.getElementById('system-prompt').value;const pw=document.getElementById('new-password').value;if(pw)body.newPassword=pw;try{const r=await api('/settings',{method:'POST',body:JSON.stringify(body)});if(r.success){msg.textContent='设置已保存';msg.className='msg success';document.getElementById('new-password').value='';document.getElementById('qq-app-secret').value=''}else{msg.textContent=r.error||'保存失败';msg.className='msg error'}}catch(e){msg.textContent='网络错误';msg.className='msg error'}});
+document.getElementById('clear-chat-btn').addEventListener('click',async()=>{if(!confirm('确定要清空所有聊天记录吗？此操作不可恢复！'))return;const btn=document.getElementById('clear-chat-btn');btn.disabled=true;btn.textContent='清空中...';const msg=document.getElementById('settings-msg');try{const r=await api('/clear',{method:'POST'});if(r.success){msg.textContent='聊天记录已清空';msg.className='msg success'}else{msg.textContent=r.error||'清空失败';msg.className='msg error'}}catch(e){msg.textContent='网络错误';msg.className='msg error'}btn.disabled=false;btn.textContent='清空聊天记录'});
 if(token)showAdminPage()`;

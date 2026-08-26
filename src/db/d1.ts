@@ -96,6 +96,12 @@ export async function clearConversations(db: D1Database, userId: string): Promis
   await db.prepare('DELETE FROM summaries WHERE user_id = ?').bind(userId).run();
 }
 
+// 清空所有用户的聊天记录
+export async function clearAllConversations(db: D1Database): Promise<void> {
+  await db.prepare('DELETE FROM conversations').run();
+  await db.prepare('DELETE FROM summaries').run();
+}
+
 // 摘要操作
 export async function getLatestSummary(db: D1Database, userId: string): Promise<Summary | null> {
   return db.prepare('SELECT * FROM summaries WHERE user_id = ? ORDER BY created_at DESC LIMIT 1')
