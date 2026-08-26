@@ -53,22 +53,6 @@ export async function handleWebhook(env: Env, request: Request): Promise<Respons
   const credentials = await getQQCredentials(env.KV);
   const appSecret = credentials?.appSecret || '';
 
-  // 记录最近请求到 KV（调试用）
-  try {
-    const hdrs: Record<string, string> = {};
-    request.headers.forEach((v, k) => { hdrs[k] = v; });
-    await env.KV.put('debug:last_webhook', JSON.stringify({
-      ts: new Date().toISOString(),
-      url: request.url,
-      method: request.method,
-      headers: hdrs,
-      body: body.slice(0, 2000),
-      appSecretPrefix: appSecret.slice(0, 4),
-    }));
-  } catch (e) {
-    console.error('Failed to log webhook:', e);
-  }
-
   let payload: any;
   try {
     payload = JSON.parse(body);

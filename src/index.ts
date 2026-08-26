@@ -10,16 +10,6 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    // 记录所有非静态资源请求
-    if (!path.startsWith('/style.css') && !path.startsWith('/app.js')) {
-      await env.KV.put('debug:last_request', JSON.stringify({
-        ts: new Date().toISOString(),
-        method: request.method,
-        path,
-        headers: Object.fromEntries(request.headers.entries()),
-      }), { expirationTtl: 3600 });
-    }
-
     // CORS 预检
     if (request.method === 'OPTIONS') {
       return new Response(null, {
@@ -39,30 +29,12 @@ export default {
 
       // QQ 可能先发 GET 测试可达性
       if (path === '/api/webhook') {
-        // 记录非 POST 请求
-        await env.KV.put('debug:last_other', JSON.stringify({
-          ts: new Date().toISOString(),
-          method: request.method,
-          headers: Object.fromEntries(request.headers.entries()),
-        }));
         return new Response('OK', { headers: { 'Content-Type': 'text/plain' } });
       }
 
       // 健康检查
       if (path === '/health') {
         return new Response(JSON.stringify({ ok: true, ts: Date.now() }), { headers: { 'Content-Type': 'application/json' } });
-      }
-
-      // 调试 - 查看最近的任何请求
-      if (path === '/api/debug/last' && request.method === 'GET') {
-        const last = await env.KV.get('debug:last_request', 'json');
-        return new Response(JSON.stringify(last, null, 2), { headers: { 'Content-Type': 'application/json' } });
-      }
-
-      // 调试 - 查看最近 webhook 请求
-      if (path === '/api/debug/lastwh' && request.method === 'GET') {
-        const last = await env.KV.get('debug:last_webhook', 'json');
-        return new Response(JSON.stringify(last, null, 2), { headers: { 'Content-Type': 'application/json' } });
       }
 
       // 管理 API
@@ -211,6 +183,10 @@ const HTML_CONTENT = `<!DOCTYPE html>
               <input type="password" id="qq-app-secret" placeholder="QQ 开放平台 AppSecret">
             </div>
             <div class="form-group">
+              <label>系统提示词</label>
+              <textarea id="system-prompt" rows="4" placeholder="你是一个智能助手，通过 QQ 与用户对话。请用简洁、友好的方式回复。"></textarea>
+            </div>
+            <div class="form-group">
               <label>默认模型</label>
               <input type="text" id="default-model" placeholder="gpt-3.5-turbo">
             </div>
@@ -274,6 +250,8 @@ button{padding:8px 16px;background:#07c160;color:white;border:none;border-radius
 .conversation-messages .message.assistant{background:#f3e5f5}
 .form-group{margin-bottom:15px}
 .form-group label{display:block;margin-bottom:5px;font-weight:bold}
+.form-group input,.form-group textarea{width:100%;padding:10px;border:1px solid #ddd;border-radius:4px;font-family:inherit}
+.form-group textarea{resize:vertical}
 .msg{margin-top:10px;padding:10px;border-radius:4px;display:none}
 .msg.success{display:block;background:#e8f5e9;color:#2e7d32}
 .msg.error{display:block;background:#ffebee;color:#c62828}`;
@@ -294,6 +272,6 @@ window.viewConversations=uid=>{document.querySelectorAll('.tab').forEach(t=>t.cl
 document.getElementById('user-select').addEventListener('change',e=>{if(e.target.value)loadConversations(e.target.value)});
 async function loadConversations(uid){const d=await api('/users/'+uid+'/conversations');const c=document.getElementById('conversations-list');if(!d.conversations?.length){c.innerHTML='<p>暂无对话记录</p>';return}c.innerHTML='<div class="conversation-messages">'+d.conversations.map(c=>'<div class="message '+c.role+'"><strong>'+(c.role==='user'?'用户':'AI')+':</strong> '+c.content+'</div>').join('')+'</div>'}
 document.getElementById('logout-btn').addEventListener('click',()=>{token=null;localStorage.removeItem('admin_token');document.getElementById('admin-page').classList.remove('active');document.getElementById('login-page').classList.add('active')});
-async function loadSettings(){const d=await api('/settings');document.getElementById('qq-app-id').value=d.qqAppId||'';document.getElementById('default-model').value=d.defaultModel||'gpt-3.5-turbo'}
-document.getElementById('settings-form').addEventListener('submit',async e=>{e.preventDefault();const msg=document.getElementById('settings-msg');const body={};body.qqAppId=document.getElementById('qq-app-id').value;body.qqAppSecret=document.getElementById('qq-app-secret').value||undefined;body.defaultModel=document.getElementById('default-model').value;const pw=document.getElementById('new-password').value;if(pw)body.newPassword=pw;try{const r=await api('/settings',{method:'POST',body:JSON.stringify(body)});if(r.success){msg.textContent='设置已保存';msg.className='msg success';document.getElementById('new-password').value='';document.getElementById('qq-app-secret').value=''}else{msg.textContent=r.error||'保存失败';msg.className='msg error'}}catch(e){msg.textContent='网络错误';msg.className='msg error'}});
+async function loadSettings(){const d=await api('/settings');document.getElementById('qq-app-id').value=d.qqAppId||'';document.getElementById('default-model').value=d.defaultModel||'gpt-3.5-turbo';document.getElementById('system-prompt').value=d.systemPrompt||''}
+document.getElementById('settings-form').addEventListener('submit',async e=>{e.preventDefault();const msg=document.getElementById('settings-msg');const body={};body.qqAppId=document.getElementById('qq-app-id').value;body.qqAppSecret=document.getElementById('qq-app-secret').value||undefined;body.defaultModel=document.getElementById('default-model').value;body.systemPrompt=document.getElementById('system-prompt').value;const pw=document.getElementById('new-password').value;if(pw)body.newPassword=pw;try{const r=await api('/settings',{method:'POST',body:JSON.stringify(body)});if(r.success){msg.textContent='设置已保存';msg.className='msg success';document.getElementById('new-password').value='';document.getElementById('qq-app-secret').value=''}else{msg.textContent=r.error||'保存失败';msg.className='msg error'}}catch(e){msg.textContent='网络错误';msg.className='msg error'}});
 if(token)showAdminPage()`;

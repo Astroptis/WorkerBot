@@ -26,6 +26,7 @@ export interface SystemSettings {
   adminPassword: string;
   qqCredentials: QQCredentials | null;
   defaultModel: string;
+  systemPrompt: string;
 }
 
 export async function getSystemSettings(kv: KVNamespace): Promise<SystemSettings> {
@@ -33,6 +34,7 @@ export async function getSystemSettings(kv: KVNamespace): Promise<SystemSettings
     adminPassword: (await kv.get('admin:password')) || '',
     qqCredentials: await getQQCredentials(kv),
     defaultModel: await getDefaultModel(kv),
+    systemPrompt: await getSystemPrompt(kv),
   };
 }
 
@@ -91,6 +93,15 @@ export async function getDefaultModel(kv: KVNamespace): Promise<string> {
 
 export async function setDefaultModel(kv: KVNamespace, model: string): Promise<void> {
   await kv.put('config:default_model', model);
+}
+
+// 系统提示词
+export async function getSystemPrompt(kv: KVNamespace): Promise<string> {
+  return (await kv.get('config:system_prompt')) || '你是一个智能助手，通过 QQ 与用户对话。请用简洁、友好的方式回复。';
+}
+
+export async function setSystemPrompt(kv: KVNamespace, prompt: string): Promise<void> {
+  await kv.put('config:system_prompt', prompt);
 }
 
 // 用户模型设置
