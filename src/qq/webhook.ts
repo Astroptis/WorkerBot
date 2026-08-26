@@ -102,7 +102,7 @@ export async function handleWebhook(env: Env, request: Request, ctx?: ExecutionC
     return new Response('OK');
   }
 
-  // 处理消息（同步等待，但 chat.ts 内部有超时保护，确保不挂起）
+  // 处理消息（用 waitUntil 异步处理：先返回 OK 给 QQ，避免 QQ 等待超时）
   const processAsync = async () => {
     try {
       // 确保用户存在
@@ -139,6 +139,11 @@ export async function handleWebhook(env: Env, request: Request, ctx?: ExecutionC
       }
     }
   };
+
+  if (ctx && typeof ctx.waitUntil === 'function') {
+    ctx.waitUntil(processAsync());
+    return new Response('OK');
+  }
 
   await processAsync();
   return new Response('OK');
