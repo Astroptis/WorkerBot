@@ -2,8 +2,9 @@ import { Env } from '../types';
 import { ChatMessage, ChatCompletionResponse } from './types';
 import { selectApiKey } from './keys';
 import { getSystemPrompt } from '../db/kv';
+import { needsSearch, extractSearchQuery, webSearch, formatSearchResults } from './tools';
 
-// 自定义超时（不依赖 AbortController，避免 Cloudflare 兼容问题）
+// 自定义超时
 function fetchWithTimeout(url: string, options: RequestInit, ms: number): Promise<Response> {
   return Promise.race([
     fetch(url, options),
@@ -16,7 +17,7 @@ async function callOnce(
   keyConfig: { apiKey: string; model: string },
   systemPrompt: string,
   messages: ChatMessage[]
-): Promise<string> {
+): Promise<ChatCompletionResponse> {
   const response = await fetchWithTimeout(url, {
     method: 'POST',
     headers: {
@@ -27,9 +28,9 @@ async function callOnce(
       model: keyConfig.model,
       messages: [{ role: 'system', content: systemPrompt }, ...messages],
       temperature: 0.7,
-      max_tokens: 1024,
+      max_tokens: 2048,
     }),
-  }, 15000);
+  }, 30000);
 
   const responseText = await response.text();
 
@@ -37,8 +38,7 @@ async function callOnce(
     throw new Error(`AI API error: ${response.status} ${responseText}`);
   }
 
-  const data = JSON.parse(responseText) as ChatCompletionResponse;
-  return data.choices[0]?.message?.content || '抱歉，我无法生成回复。';
+  return JSON.parse(responseText) as ChatCompletionResponse;
 }
 
 export async function chat(
@@ -51,7 +51,7 @@ export async function chat(
   const useModel = model || keyConfig.model;
   const systemPrompt = await getSystemPrompt(env.KV);
 
-  // 构建完整 URL：如果 endpoint 已经包含 /chat/completions 则直接使用，否则拼接
+  // 构建完整 URL
   let url = keyConfig.endpoint;
   if (!url.includes('/chat/completions')) {
     if (url.endsWith('/')) url = url.slice(0, -1);
@@ -59,13 +59,28 @@ export async function chat(
     url += '/chat/completions';
   }
 
+  // 检测最后一条用户消息是否需要搜索
+  const lastUserMsg = messages.filter(m => m.role === 'user').pop();
+  let searchResult = '';
+  if (lastUserMsg?.content && needsSearch(lastUserMsg.content)) {
+    const query = extractSearchQuery(lastUserMsg.content);
+    try {
+      const results = await webSearch(query);
+      searchResult = `\n\n【联网搜索结果】\n${formatSearchResults(results)}\n\n请基于以上搜索结果回答用户的问题。如果搜索结果与问题无关，请忽略。`;
+    } catch (e: any) {
+      searchResult = '\n\n【联网搜索失败，请基于你的知识回答】';
+    }
+  }
+
   // 第一次尝试
   try {
-    return await callOnce(url, { apiKey: keyConfig.apiKey, model: useModel }, systemPrompt, messages);
+    const data = await callOnce(url, { apiKey: keyConfig.apiKey, model: useModel }, systemPrompt + searchResult, messages);
+    return data.choices[0]?.message?.content || '抱歉，我无法生成回复。';
   } catch (error: any) {
-    // 第二次重试
+    // 第二次重试（不带搜索结果）
     try {
-      return await callOnce(url, { apiKey: keyConfig.apiKey, model: useModel }, systemPrompt, messages);
+      const data = await callOnce(url, { apiKey: keyConfig.apiKey, model: useModel }, systemPrompt, messages);
+      return data.choices[0]?.message?.content || '抱歉，我无法生成回复。';
     } catch (error2: any) {
       throw error2;
     }
