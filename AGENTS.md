@@ -25,6 +25,11 @@
 - PowerShell 不支持 `&&`，用 `;`
 - 查询/删除 D1 远程库：`wrangler d1 execute qq-bot-db --remote --command "SQL"`（单条语句，不能多条）
 - Windows curl 发送 JSON 到 QQ token 接口会报 `100002`，用 Node.js 或 Worker fetch 测试
+- **webhook 必须用 `ctx.waitUntil()` 异步处理消息**：如果同步等待 AI fetch（3-5秒+偶发挂起）再返回，Cloudflare 会强制终止 Worker 导致 AI 请求中断、消息丢失。先返回 `OK` 再 `ctx.waitUntil(processAsync())` 已解决
+- **不要用 AbortController + fetch**：Cloudflare Workers 存在兼容问题会导致请求挂起；改用 `Promise.race([fetch, timeout])` 实现超时
+- **给 AI 调用加超时 + 重试**：`api.b.ai` 对 Cloudflare Worker 偶发不响应，`fetchWithTimeout(15000)` + 二次重试提高可靠性
+- **AppSecret 重置后需等待几分钟**：QQ 平台 secret 缓存有延迟，重置后立即保存 webhook 会报签名错误，等 5 分钟再试
+- **AppSecret 一致性**：用户多次重置，每次重置后必须同步更新 KV `config:qq_credentials`，否则签名验证失败
 
 ## 部署与仓库
 - 部署：`wrangler deploy`（项目目录 `C:\Users\wang\qq-bot-worker`）
