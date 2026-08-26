@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
-    "setup": "node -e \"require('child_process').execSync('pwsh -File scripts/setup.ps1',{stdio:'inherit'})\"",
+    "setup": "bash scripts/setup.sh",
     "deploy": "npm run setup && wrangler deploy",
     "db:init": "wrangler d1 execute qq-bot-db --file=./src/db/schema.sql --remote"
   },

@@ -5,8 +5,8 @@ compatibility_date = "2024-01-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "qq-bot-db"
-database_id = "17d88c9d-8da7-4831-ac7f-656a8ddfa515"
+database_id = "YOUR_D1_DATABASE_ID"
 
 [[kv_namespaces]]
 binding = "KV"
-id = "3478c0ea9fe34e86bfb6070cf7c59411"
+id = "YOUR_KV_NAMESPACE_ID"
